@@ -1,149 +1,126 @@
-import pytest
-from tasks import router  # Assuming your API code is in "your_api.py"
+from fastapi.testclient import TestClient
+from main import app
 
-# Sample task data
-task1 = {"title": "Task 1", "description": "First task", "status": "pending", "due_date": "2023-11-20"}
-task2 = {"title": "Task 2", "status": "completed", "due_date": "2023-11-23"}
+client = TestClient(app)
 
-def test_create_task():
-    # Create a new task
-    response = router.post("/", json=task1)
+
+def test_create_task_success():
+    task_data = {
+        "title": "Test Task",
+        "description": "This is a test task",
+        "status": "pending",
+        "due_date": "2023-12-31",
+    }
+    response = client.post("/tasks/", json=task_data)
     assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == 1
-    assert data["title"] == task1["title"]
-    assert data["description"] == task1["description"]
-    assert data["status"] == task1["status"]
-    assert data["due_date"] == task1["due_date"]
+    assert response.json()["title"] == "Test Task"
+    assert response.json()["description"] == "This is a test task"
+    assert response.json()["status"] == "pending"
+    assert response.json()["due_date"] == "2023-12-31"
 
-def test_create_task_missing_fields():
-    # Create a task with missing fields
-    response = router.post("/", json={"title": "Task 3"})
+
+def test_create_task_missing_title():
+    task_data = {
+        "description": "This is a test task",
+        "status": "pending",
+        "due_date": "2023-12-31",
+    }
+    response = client.post("/tasks/", json=task_data)
     assert response.status_code == 422
+    assert response.json()["detail"][0]["msg"] == "field required"
+    assert response.json()["detail"][0]["loc"] == ["body", "title"]
 
-def test_get_tasks():
-    # Get all tasks
-    response = router.get("/")
+
+def test_get_tasks_empty():
+    response = client.get("/tasks/")
     assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
-    assert data[0]["id"] == 1
-    assert data[0]["title"] == task1["title"]
-    assert data[1]["id"] == 2
-    assert data[1]["title"] == task2["title"]
+    assert response.json() == []
 
-def test_get_task_by_id():
-    # Get task by ID
-    response = router.get("/1")
+
+def test_get_tasks_with_data():
+    task_data = {
+        "title": "Test Task",
+        "description": "This is a test task",
+        "status": "pending",
+        "due_date": "2023-12-31",
+    }
+    client.post("/tasks/", json=task_data)  # Create a task first
+    response = client.get("/tasks/")
     assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == 1
-    assert data["title"] == task1["title"]
+    assert len(response.json()) == 1
+    assert response.json()[0]["title"] == "Test Task"
 
-def test_get_nonexistent_task():
-    # Get non-existent task
-    response = router.get("/3")
+
+def test_get_task_by_id_success():
+    task_data = {
+        "title": "Test Task",
+        "description": "This is a test task",
+        "status": "pending",
+        "due_date": "2023-12-31",
+    }
+    response = client.post("/tasks/", json=task_data)
+    task_id = response.json()["id"]
+    response = client.get(f"/tasks/{task_id}")
+    assert response.status_code == 200
+    assert response.json()["title"] == "Test Task"
+
+
+def test_get_task_by_id_not_found():
+    response = client.get("/tasks/100")  # Assuming no task with ID 100
     assert response.status_code == 404
+    assert response.json()["detail"] == "Task not found"
 
-def test_update_task():
-    # Update existing task
-    updated_task = {"title": "Updated Task 1", "status": "completed"}
-    response = router.put("/1", json=updated_task)
+
+def test_update_task_success():
+    task_data = {
+        "title": "Test Task",
+        "description": "This is a test task",
+        "status": "pending",
+        "due_date": "2023-12-31",
+    }
+    response = client.post("/tasks/", json=task_data)
+    task_id = response.json()["id"]
+    updated_data = {
+        "title": "Updated Test Task",
+        "description": "This is an updated test task",
+        "status": "completed",
+        "due_date": "2024-01-01",
+    }
+    response = client.put(f"/tasks/{task_id}", json=updated_data)
     assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == 1
-    assert data["title"] == updated_task["title"]
-    assert data["status"] == updated_task["status"]
+    assert response.json()["title"] == "Updated Test Task"
+    assert response.json()["description"] == "This is an updated test task"
+    assert response.json()["status"] == "completed"
+    assert response.json()["due_date"] == "2024-01-01"
 
-def test_update_nonexistent_task():
-    # Update non-existent task
-    response = router.put("/3", json={"title": "Task 3"})
+
+def test_update_task_not_found():
+    updated_data = {
+        "title": "Updated Test Task",
+        "description": "This is an updated test task",
+        "status": "completed",
+        "due_date": "2024-01-01",
+    }
+    response = client.put("/tasks/100", json=updated_data)  # Assuming no task with ID 100
     assert response.status_code == 404
+    assert response.json()["detail"] == "Task not found"
 
-def test_delete_task():
-    # Delete task
-    response = router.delete("/1")
+
+def test_delete_task_success():
+    task_data = {
+        "title": "Test Task",
+        "description": "This is a test task",
+        "status": "pending",
+        "due_date": "2023-12-31",
+    }
+    response = client.post("/tasks/", json=task_data)
+    task_id = response.json()["id"]
+    response = client.delete(f"/tasks/{task_id}")
     assert response.status_code == 200
-    data = response.json()
-    assert data["detail"] == "Task deleted successfully"
+    assert response.json() == {"detail": "Task deleted successfully"}
 
-def test_delete_nonexistent_task():
-    # Delete non-existent task
-    response = router.delete("/3")
+
+def test_delete_task_not_found():
+    response = client.delete("/tasks/100")  # Assuming no task with ID 100
     assert response.status_code == 404
-
-import pytest
-def test_create_task():
-    # Create a new task
-    response = router.post("/", json=task1)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == 1
-    assert data["title"] == task1["title"]
-    assert data["description"] == task1["description"]
-    assert data["status"] == task1["status"]
-    assert data["due_date"] == task1["due_date"]
-
-import pytest
-def test_create_task_missing_fields():
-    # Create a task with missing fields
-    response = router.post("/", json={"title": "Task 3"})
-    assert response.status_code == 422
-
-import pytest
-def test_get_tasks():
-    # Get all tasks
-    response = router.get("/")
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
-    assert data[0]["id"] == 1
-    assert data[0]["title"] == task1["title"]
-    assert data[1]["id"] == 2
-    assert data[1]["title"] == task2["title"]
-
-import pytest
-def test_get_task_by_id():
-    # Get task by ID
-    response = router.get("/1")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == 1
-    assert data["title"] == task1["title"]
-
-import pytest
-def test_get_nonexistent_task():
-    # Get non-existent task
-    response = router.get("/3")
-    assert response.status_code == 404
-
-import pytest
-def test_update_task():
-    # Update existing task
-    updated_task = {"title": "Updated Task 1", "status": "completed"}
-    response = router.put("/1", json=updated_task)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == 1
-    assert data["title"] == updated_task["title"]
-    assert data["status"] == updated_task["status"]
-
-import pytest
-def test_update_nonexistent_task():
-    # Update non-existent task
-    response = router.put("/3", json={"title": "Task 3"})
-    assert response.status_code == 404
-
-import pytest
-def test_delete_task():
-    # Delete task
-    response = router.delete("/1")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["detail"] == "Task deleted successfully"
-
-import pytest
-def test_delete_nonexistent_task():
-    # Delete non-existent task
-    response = router.delete("/3")
-    assert response.status_code == 404
+    assert response.json()["detail"] == "Task not found"
